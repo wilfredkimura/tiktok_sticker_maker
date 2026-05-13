@@ -35,5 +35,13 @@
             </intent-filter>
         </activity>
         
+        <!-- WhatsApp Sticker Content Provider Setup -->
+        <provider
+            android:name=".stickers.StickerContentProvider"
+            android:authorities="com.tiktok.stickermaker.stickercontentprovider"
+            android:enabled="true"
+            android:exported="true"
+            android:readPermission="com.whatsapp.sticker.READ" />
+            
     </application>
 </manifest>

@@ -1,4 +1,5 @@
 # Python Backend
+cookies.txt
 backend/venv/
 __pycache__/
 *.py[cod]

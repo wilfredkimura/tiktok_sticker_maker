@@ -80,13 +80,18 @@ object StickerPackManager {
         
         // Expert Constraint: Pack must have 3-30 stickers
         if (!StickerValidator.validatePack(pack)) {
-            val msg = if (pack.stickers.size < 3) "Pack needs at least 3 stickers" else "Pack limit is 30 stickers"
+            val msg = if (pack.stickers.size < 3) 
+                "WhatsApp Error: Pack has only ${pack.stickers.size} stickers. Minimum is 3." 
+            else 
+                "WhatsApp Error: Pack has ${pack.stickers.size} stickers. Maximum is 30."
+            
+            com.tiktok.stickermaker.utils.AppLogger.log(msg, com.tiktok.stickermaker.utils.LogLevel.ERROR)
             android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
             return
         }
 
+        com.tiktok.stickermaker.utils.AppLogger.log("Firing WhatsApp Import Intent for pack: ${pack.name}")
         val intent = Intent()
-        // Official WhatsApp Action
         intent.action = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
         
         // Requested Keys: launch_pool_id, launch_pool_name, launch_pool_authority

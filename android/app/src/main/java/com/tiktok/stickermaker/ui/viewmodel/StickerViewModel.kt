@@ -156,6 +156,7 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun addToWhatsApp() {
+        AppLogger.log("User triggered Add to WhatsApp")
         StickerPackManager.addStickerPackToWhatsApp(getApplication())
     }
 

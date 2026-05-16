@@ -203,7 +203,7 @@ fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
                         )
                         is AppState.Editor -> EditorScreen(
                             videoFile = currentState.videoFile,
-                            onCreateSticker = { start, duration -> viewModel.createSticker(currentState.videoFile, start, duration) },
+                            onCreateSticker = { start, duration, text -> viewModel.createSticker(currentState.videoFile, start, duration, text) },
                             onBack = { viewModel.reset() }
                         )
                         is AppState.Exporting -> LoadingScreen("Generating Sticker...")

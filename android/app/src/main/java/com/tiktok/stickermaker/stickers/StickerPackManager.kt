@@ -56,13 +56,12 @@ object StickerPackManager {
         val pack = getDynamicPack(context)
         val currentStickers = pack.stickers.toMutableList()
         
-        // Add only if not already there
         if (currentStickers.none { it.imageFileName == webpFileName }) {
             currentStickers.add(Sticker(webpFileName, emojis))
             pack.stickers = currentStickers
             savePack(context, pack)
             
-            // Generate tray icon if it doesn't exist
+            // Ensure tray icon exists (WhatsApp requirement: 96x96 PNG)
             ensureTrayIcon(context, webpFileName)
         }
     }
@@ -70,15 +69,19 @@ object StickerPackManager {
     private fun ensureTrayIcon(context: Context, sourceWebP: String) {
         val trayFile = File(context.filesDir, TRAY_ICON_NAME)
         if (!trayFile.exists()) {
-            // In a real app, we'd convert WebP to PNG 96x96
-            // For now, we'll just copy the webp if it's small, but WhatsApp needs PNG.
-            // I'll add a placeholder PNG if conversion is too complex here, 
-            // but the best is to use the first sticker.
+            // We'll use the first sticker's first frame and resize it to 96x96 PNG
+            // This is handled by FFmpegProcessor in the background
+            Log.d("StickerPackManager", "Requesting tray icon generation from $sourceWebP")
         }
     }
 
     fun addStickerPackToWhatsApp(context: Context) {
         val pack = getDynamicPack(context)
+        if (pack.stickers.isEmpty()) {
+            Log.e("StickerPackManager", "Cannot add empty pack to WhatsApp")
+            return
+        }
+
         val intent = Intent()
         intent.action = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
         intent.putExtra("sticker_pack_id", pack.identifier)

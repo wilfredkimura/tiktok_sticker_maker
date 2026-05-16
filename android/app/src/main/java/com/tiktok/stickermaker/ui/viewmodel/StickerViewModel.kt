@@ -116,12 +116,14 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
         val uri = com.tiktok.stickermaker.utils.StickerStorage.saveVideoToGallery(getApplication(), videoFile)
         if (uri != null) {
             AppLogger.log("Video saved to gallery: $uri")
-            // Show toast or stay in same state
+            android.widget.Toast.makeText(getApplication(), "Video saved to Gallery!", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(getApplication(), "Failed to save video", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
-    fun createSticker(videoFile: File, startTime: Float, duration: Float) {
-        AppLogger.log("Creating sticker: start=${startTime}s, duration=${duration}s")
+    fun createSticker(videoFile: File, startTime: Float, duration: Float, text: String) {
+        AppLogger.log("Creating sticker: start=${startTime}s, duration=${duration}s, text='$text'")
         viewModelScope.launch {
             state = AppState.Exporting(0f)
             try {
@@ -129,7 +131,8 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                     videoFile.absolutePath,
                     "sticker_${System.currentTimeMillis()}",
                     startTime,
-                    duration
+                    duration,
+                    text
                 )
                 if (stickerFile != null) {
                     AppLogger.log("Sticker created: ${stickerFile.absolutePath}")
@@ -139,6 +142,7 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                     stickerFile.renameTo(permanentFile)
                     
                     StickerPackManager.addSticker(getApplication(), permanentFile.name)
+                    processor.generateTrayIcon(permanentFile.absolutePath)
                     state = AppState.Success(permanentFile, videoFile)
                 } else {
                     AppLogger.log("FFmpeg processing failed", LogLevel.ERROR)

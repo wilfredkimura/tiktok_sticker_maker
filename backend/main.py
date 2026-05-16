@@ -112,7 +112,7 @@ async def proxy_video(url: str):
                     # curl-cffi handle streaming differently. We fetch the content.
                     # TikTok videos are small (usually < 20MB), so we can fetch and yield.
                     # Impersonation happens automatically with the session.
-                    response = await s.get(actual_url, headers=headers, timeout=60, follow_redirects=True)
+                    response = await s.get(actual_url, headers=headers, timeout=60, allow_redirects=True)
                     
                     if response.status_code != 200:
                         logger.error(f"TikTok CDN returned {response.status_code} via curl-cffi")

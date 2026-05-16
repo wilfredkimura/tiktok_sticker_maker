@@ -10,53 +10,42 @@ import java.io.File
 
 class FFmpegProcessor(private val context: Context) {
 
-    /**
-     * Converts a downloaded MP4 video into a WebP sticker format.
-     * Dimensions: 512x512 (required by WhatsApp)
-     * Framerate: 15 fps
-     * Duration limit: 6 seconds (if needed to trim, handled by start/duration params)
-     */
     suspend fun convertToWebP(
-        inputVideoPath: String,
-        outputFileName: String,
-        startTimeSec: Float = 0f,
-        durationSec: Float = 6f
+        videoPath: String,
+        outputName: String,
+        startTime: Float,
+        duration: Float
     ): File? = withContext(Dispatchers.IO) {
-        val outputFile = File(context.filesDir, "$outputFileName.webp")
-        if (outputFile.exists()) {
-            outputFile.delete()
-        }
-
+        val outputFile = File(context.filesDir, "$outputName.webp")
+        
         // WhatsApp animated sticker requirements:
-        // - 512x512 exactly
-        // - WebP format
-        // - Loop infinitely
-        // - Under 500KB ideally
-        
-        // Construct the FFmpeg command
-        // -ss start time
-        // -t duration
-        // -i input
-        // -vf scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2,fps=15
-        // -vcodec libwebp -lossless 0 -qscale 50 -preset default -loop 0 -an -vsync 0
-        
-        val command = "-y -ss $startTimeSec -t $durationSec -i \"$inputVideoPath\" " +
-                "-vf \"scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2,fps=15\" " +
+        // - 512x512 exactly (padded with transparency)
+        // - 15 fps
+        // - Loop 0 (infinite)
+        // - Under 512KB
+        val command = "-y -ss $startTime -t $duration -i \"$videoPath\" " +
+                "-vf \"scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000,fps=15\" " +
                 "-vcodec libwebp -lossless 0 -compression_level 4 -q:v 50 -loop 0 -preset default -an -vsync 0 " +
                 "\"${outputFile.absolutePath}\""
 
         Log.d("FFmpegProcessor", "Executing command: $command")
         
         val session = FFmpegKit.execute(command)
-        val returnCode = session.returnCode
-
-        if (ReturnCode.isSuccess(returnCode)) {
-            Log.d("FFmpegProcessor", "Conversion successful: ${outputFile.absolutePath}")
-            return@withContext outputFile
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            // Also generate a tray icon if it doesn't exist (PNG 96x96)
+            generateTrayIcon(videoPath)
+            outputFile
         } else {
-            Log.e("FFmpegProcessor", "Conversion failed with return code: $returnCode")
-            Log.e("FFmpegProcessor", "FFmpeg logs: ${session.allLogsAsString}")
-            return@withContext null
+            Log.e("FFmpegProcessor", "FFmpeg failed: ${session.allLogsAsString}")
+            null
+        }
+    }
+
+    private fun generateTrayIcon(videoPath: String) {
+        val trayFile = File(context.filesDir, "tray_icon.png")
+        if (!trayFile.exists()) {
+            val command = "-y -i \"$videoPath\" -ss 0 -vframes 1 -vf \"scale=96:96:force_original_aspect_ratio=decrease,pad=96:96:(ow-iw)/2:(oh-ih)/2:color=#00000000\" \"${trayFile.absolutePath}\""
+            FFmpegKit.execute(command)
         }
     }
 }

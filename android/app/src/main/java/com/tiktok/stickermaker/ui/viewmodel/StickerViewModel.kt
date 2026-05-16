@@ -21,11 +21,13 @@ import java.io.File
 sealed class AppState {
     object Home : AppState()
     object Loading : AppState()
+    data class Downloaded(val videoFile: File) : AppState()
     data class Editor(val videoFile: File) : AppState()
     data class Exporting(val progress: Float) : AppState()
-    data class Success(val stickerFile: File) : AppState()
+    data class Success(val stickerFile: File, val videoFile: File) : AppState()
     data class Error(val message: String) : AppState()
     object Logs : AppState()
+    object Library : AppState()
 }
 
 class StickerViewModel(application: Application) : AndroidViewModel(application) {
@@ -94,7 +96,7 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                 val videoFile = downloader.downloadVideo(finalUrl, "temp_video")
                 if (videoFile != null) {
                     AppLogger.log("Download complete: ${videoFile.length()} bytes")
-                    state = AppState.Editor(videoFile)
+                    state = AppState.Downloaded(videoFile)
                 } else {
                     AppLogger.log("Download failed", LogLevel.ERROR)
                     state = AppState.Error("Failed to download video")
@@ -103,6 +105,18 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                 AppLogger.log("Resolution failed: ${e.message}", LogLevel.ERROR)
                 state = AppState.Error(e.message ?: "Unknown error")
             }
+        }
+    }
+
+    fun startEditing(videoFile: File) {
+        state = AppState.Editor(videoFile)
+    }
+
+    fun saveVideoToGallery(videoFile: File) {
+        val uri = com.tiktok.stickermaker.utils.StickerStorage.saveVideoToGallery(getApplication(), videoFile)
+        if (uri != null) {
+            AppLogger.log("Video saved to gallery: $uri")
+            // Show toast or stay in same state
         }
     }
 
@@ -119,8 +133,13 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                 )
                 if (stickerFile != null) {
                     AppLogger.log("Sticker created: ${stickerFile.absolutePath}")
-                    StickerPackManager.addSticker(getApplication(), stickerFile.name)
-                    state = AppState.Success(stickerFile)
+                    
+                    // Move to permanent stickers directory
+                    val permanentFile = File(com.tiktok.stickermaker.utils.StickerStorage.getStickersDirectory(getApplication()), stickerFile.name)
+                    stickerFile.renameTo(permanentFile)
+                    
+                    StickerPackManager.addSticker(getApplication(), permanentFile.name)
+                    state = AppState.Success(permanentFile, videoFile)
                 } else {
                     AppLogger.log("FFmpeg processing failed", LogLevel.ERROR)
                     state = AppState.Error("FFmpeg processing failed")
@@ -130,6 +149,14 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
                 state = AppState.Error(e.message ?: "Processing error")
             }
         }
+    }
+
+    fun addToWhatsApp() {
+        StickerPackManager.addStickerPackToWhatsApp(getApplication())
+    }
+
+    fun showLibrary() {
+        state = AppState.Library
     }
 
     fun showLogs() {

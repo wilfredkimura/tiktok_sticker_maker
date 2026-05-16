@@ -16,47 +16,41 @@ class StickerContentProvider : ContentProvider() {
 
     companion object {
         const val AUTHORITY = "com.tiktok.stickermaker.stickercontentprovider"
-        const val METADATA = "metadata"
-        const val METADATA_ID = "metadata/*"
-        const val STICKERS = "stickers/*"
-        const val STICKERS_ASSET = "stickers_asset/*/*"
-        const val STICKER_PACK_ICON_IN_DIR = "sticker_pack_icon/*/*"
+        
+        // WhatsApp standard paths
+        private const val METADATA = "metadata"
+        private const val STICKERS = "stickers"
+        private const val STICKERS_ASSET = "stickers_asset"
+        private const val STICKER_PACK_TRAY_ICON = "sticker_pack_icon"
 
         private const val METADATA_CODE = 1
-        private const val METADATA_ID_CODE = 2
-        private const val STICKERS_CODE = 3
-        private const val STICKERS_ASSET_CODE = 4
-        private const val STICKER_PACK_ICON_IN_DIR_CODE = 5
+        private const val STICKERS_CODE = 2
+        private const val STICKERS_ASSET_CODE = 3
+        private const val STICKER_PACK_TRAY_ICON_CODE = 4
 
         private val MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(AUTHORITY, METADATA, METADATA_CODE)
-            addURI(AUTHORITY, METADATA_ID, METADATA_ID_CODE)
-            addURI(AUTHORITY, STICKERS, STICKERS_CODE)
-            addURI(AUTHORITY, STICKERS_ASSET, STICKERS_ASSET_CODE)
-            addURI(AUTHORITY, STICKER_PACK_ICON_IN_DIR, STICKER_PACK_ICON_IN_DIR_CODE)
+            addURI(AUTHORITY, "$STICKERS/*", STICKERS_CODE)
+            addURI(AUTHORITY, "$STICKERS_ASSET/*/*", STICKERS_ASSET_CODE)
+            addURI(AUTHORITY, "$STICKER_PACK_TRAY_ICON/*/*", STICKER_PACK_TRAY_ICON_CODE)
         }
     }
 
-    override fun onCreate(): Boolean {
-        return true
-    }
+    override fun onCreate(): Boolean = true
 
     override fun query(
         uri: Uri, projection: Array<String>?, selection: String?,
         selectionArgs: Array<String>?, sortOrder: String?
     ): Cursor? {
-        val code = MATCHER.match(uri)
-        return when (code) {
-            METADATA_CODE -> getPackCursor(uri)
-            METADATA_ID_CODE -> getPackCursor(uri)
-            STICKERS_CODE -> getStickersCursor(uri)
-            else -> throw IllegalArgumentException("Unknown URI: $uri")
+        return when (MATCHER.match(uri)) {
+            METADATA_CODE -> getPackCursor()
+            STICKERS_CODE -> getStickersCursor(uri.lastPathSegment!!)
+            else -> null
         }
     }
 
-    private fun getPackCursor(uri: Uri): Cursor {
-        // WhatsApp expects these specific columns
-        val columns = arrayOf(
+    private fun getPackCursor(): Cursor {
+        val cursor = MatrixCursor(arrayOf(
             "sticker_pack_identifier",
             "sticker_pack_name",
             "sticker_pack_publisher",
@@ -67,73 +61,64 @@ class StickerContentProvider : ContentProvider() {
             "sticker_pack_publisher_website",
             "sticker_pack_privacy_policy_website",
             "sticker_pack_license_agreement_website",
-            "image_data_version",
-            "avoid_cache",
             "animated_sticker_pack"
-        )
-        val cursor = MatrixCursor(columns)
+        ))
         
-        // Return dummy dynamic pack info (We can hook this to StickerPackManager later)
         val pack = StickerPackManager.getDynamicPack(context!!)
-        if (pack != null) {
-            cursor.addRow(
-                arrayOf(
-                    pack.identifier,
-                    pack.name,
-                    pack.publisher,
-                    pack.trayImageFile,
-                    "", // Play store link
-                    "", // iOS store link
-                    pack.publisherEmail,
-                    pack.publisherWebsite,
-                    pack.privacyPolicyWebsite,
-                    pack.licenseAgreementWebsite,
-                    pack.imageDataVersion,
-                    if (pack.avoidCache) 1 else 0,
-                    if (pack.animatedStickerPack) 1 else 0
-                )
-            )
-        }
+        cursor.addRow(arrayOf(
+            pack.identifier,
+            pack.name,
+            pack.publisher,
+            pack.trayImageFile,
+            "", // Play store link
+            "", // iOS store link
+            pack.publisherEmail,
+            pack.publisherWebsite,
+            pack.privacyPolicyWebsite,
+            pack.licenseAgreementWebsite,
+            if (pack.animatedStickerPack) 1 else 0
+        ))
         return cursor
     }
 
-    private fun getStickersCursor(uri: Uri): Cursor {
-        val columns = arrayOf("sticker_file_name", "sticker_emoji")
-        val cursor = MatrixCursor(columns)
-        
+    private fun getStickersCursor(identifier: String): Cursor {
+        val cursor = MatrixCursor(arrayOf("sticker_file_name", "sticker_emoji"))
         val pack = StickerPackManager.getDynamicPack(context!!)
-        pack?.stickers?.forEach { sticker ->
-            cursor.addRow(arrayOf(sticker.imageFileName, sticker.emojis.joinToString(",")))
+        if (pack.identifier == identifier) {
+            pack.stickers.forEach { sticker ->
+                cursor.addRow(arrayOf(sticker.imageFileName, sticker.emojis.joinToString(",")))
+            }
         }
         return cursor
     }
 
     override fun openAssetFile(uri: Uri, mode: String): AssetFileDescriptor? {
         val matchCode = MATCHER.match(uri)
-        val pathSegments = uri.pathSegments
-
-        if (matchCode == STICKERS_ASSET_CODE || matchCode == STICKER_PACK_ICON_IN_DIR_CODE) {
-            val identifier = pathSegments[1]
-            val fileName = pathSegments[2]
+        if (matchCode == STICKERS_ASSET_CODE || matchCode == STICKER_PACK_TRAY_ICON_CODE) {
+            val fileName = uri.lastPathSegment!!
+            val file = if (matchCode == STICKER_PACK_TRAY_ICON_CODE) {
+                File(context!!.filesDir, fileName)
+            } else {
+                File(com.tiktok.stickermaker.utils.StickerStorage.getStickersDirectory(context!!), fileName)
+            }
             
-            // Read the dynamic file from context.filesDir
-            val file = File(context!!.filesDir, fileName)
             if (file.exists()) {
-                val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-                return AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH)
+                return AssetFileDescriptor(
+                    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY),
+                    0, AssetFileDescriptor.UNKNOWN_LENGTH
+                )
             }
         }
-        throw FileNotFoundException("File not found: $uri")
+        return null
     }
 
     override fun getType(uri: Uri): String? {
         return when (MATCHER.match(uri)) {
-            METADATA_CODE -> "vnd.android.cursor.dir/vnd.com.tiktok.stickermaker.stickercontentprovider.metadata"
-            METADATA_ID_CODE -> "vnd.android.cursor.item/vnd.com.tiktok.stickermaker.stickercontentprovider.metadata"
-            STICKERS_CODE -> "vnd.android.cursor.dir/vnd.com.tiktok.stickermaker.stickercontentprovider.stickers"
+            METADATA_CODE -> "vnd.android.cursor.dir/vnd.$AUTHORITY.metadata"
+            STICKERS_CODE -> "vnd.android.cursor.dir/vnd.$AUTHORITY.stickers"
             STICKERS_ASSET_CODE -> "image/webp"
-            STICKER_PACK_ICON_IN_DIR_CODE -> "image/png"
-            else -> throw IllegalArgumentException("Unknown URI: $uri")
+            STICKER_PACK_TRAY_ICON_CODE -> "image/png"
+            else -> null
         }
     }
 

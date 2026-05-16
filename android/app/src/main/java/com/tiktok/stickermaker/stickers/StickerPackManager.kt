@@ -77,22 +77,53 @@ object StickerPackManager {
 
     fun addStickerPackToWhatsApp(context: Context) {
         val pack = getDynamicPack(context)
-        if (pack.stickers.isEmpty()) {
-            Log.e("StickerPackManager", "Cannot add empty pack to WhatsApp")
+        
+        // Expert Constraint: Pack must have 3-30 stickers
+        if (!StickerValidator.validatePack(pack)) {
+            val msg = if (pack.stickers.size < 3) "Pack needs at least 3 stickers" else "Pack limit is 30 stickers"
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
             return
         }
 
         val intent = Intent()
+        // Official WhatsApp Action
         intent.action = "com.whatsapp.intent.action.ENABLE_STICKER_PACK"
+        
+        // Requested Keys: launch_pool_id, launch_pool_name, launch_pool_authority
+        // Note: WhatsApp also recognizes sticker_pack_id etc. We provide both for maximum compatibility.
+        intent.putExtra("launch_pool_id", pack.identifier)
+        intent.putExtra("launch_pool_name", pack.name)
+        intent.putExtra("launch_pool_authority", StickerContentProvider.AUTHORITY)
+        
+        // Legacy/Standard keys
         intent.putExtra("sticker_pack_id", pack.identifier)
-        intent.putExtra("sticker_pack_authority", StickerContentProvider.AUTHORITY)
         intent.putExtra("sticker_pack_name", pack.name)
+        intent.putExtra("sticker_pack_authority", StickerContentProvider.AUTHORITY)
 
         try {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Log.e("StickerPackManager", "WhatsApp is not installed.")
+            // Check if WhatsApp or WA Business is installed
+            val pm = context.packageManager
+            val isWA = isPackageInstalled("com.whatsapp", pm)
+            val isWAB = isPackageInstalled("com.whatsapp.w4b", pm)
+
+            if (isWA || isWAB) {
+                // If both are installed, WhatsApp usually handles the chooser
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } else {
+                android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Log.e("StickerPackManager", "Failed to launch WhatsApp", e)
+        }
+    }
+
+    private fun isPackageInstalled(packageName: String, packageManager: android.content.pm.PackageManager): Boolean {
+        return try {
+            packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+            false
         }
     }
 }

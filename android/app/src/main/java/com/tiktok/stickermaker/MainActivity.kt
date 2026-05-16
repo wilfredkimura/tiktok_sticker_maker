@@ -4,6 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.List
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,6 +76,9 @@ fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
             },
             onDone = { viewModel.reset() }
         )
+        is AppState.Logs -> LogsScreen(
+            onBack = { viewModel.reset() }
+        )
         is AppState.Error -> ErrorScreen(state.message) { viewModel.reset() }
     }
 }
@@ -87,6 +94,12 @@ fun HomeScreen(initialUrl: String, onProcess: (String) -> Unit, viewModel: Stick
             TopAppBar(
                 title = { Text("TikTok Sticker Maker") },
                 actions = {
+                    IconButton(onClick = { viewModel.showLogs() }) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.List,
+                            contentDescription = "Logs"
+                        )
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 16.dp)
@@ -162,6 +175,50 @@ fun SuccessScreen(onAddWhatsApp: () -> Unit, onDone: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
             Text("Create Another")
+        }
+    }
+}
+
+@Composable
+fun LogsScreen(onBack: () -> Unit) {
+    val logs = com.tiktok.stickermaker.utils.AppLogger.logs
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("App Logs") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(8.dp)
+        ) {
+            items(logs) { entry ->
+                val color = when (entry.level) {
+                    com.tiktok.stickermaker.utils.LogLevel.ERROR -> Color.Red
+                    com.tiktok.stickermaker.utils.LogLevel.DEBUG -> Color.Gray
+                    else -> Color.Black
+                }
+                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    Text(
+                        text = "[${entry.timestamp}] ${entry.message}",
+                        color = color,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Divider(modifier = Modifier.padding(top = 4.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                }
+            }
         }
     }
 }

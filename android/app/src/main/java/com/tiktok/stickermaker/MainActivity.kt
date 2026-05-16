@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package com.tiktok.stickermaker
 
 import android.content.Intent
@@ -8,8 +9,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
@@ -83,7 +86,6 @@ fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(initialUrl: String, onProcess: (String) -> Unit, viewModel: StickerViewModel = viewModel()) {
     var url by remember { mutableStateOf(initialUrl) }
@@ -183,6 +185,8 @@ fun SuccessScreen(onAddWhatsApp: () -> Unit, onDone: () -> Unit) {
 fun LogsScreen(onBack: () -> Unit) {
     val logs = com.tiktok.stickermaker.utils.AppLogger.logs
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -192,6 +196,19 @@ fun LogsScreen(onBack: () -> Unit) {
                         Icon(
                             imageVector = androidx.compose.material.icons.Icons.Default.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("App Logs", com.tiktok.stickermaker.utils.AppLogger.getFullLogs())
+                        clipboard.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(context, "Logs copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Share, // Share icon as "Copy" placeholder or use custom
+                            contentDescription = "Copy Logs"
                         )
                     }
                 }

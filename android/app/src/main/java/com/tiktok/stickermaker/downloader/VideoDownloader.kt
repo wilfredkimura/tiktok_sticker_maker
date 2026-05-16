@@ -12,11 +12,19 @@ class VideoDownloader(private val context: Context) {
 
     suspend fun downloadVideo(videoUrl: String, fileName: String): File? = withContext(Dispatchers.IO) {
         try {
+            com.tiktok.stickermaker.utils.AppLogger.log("Opening connection to CDN...")
             val url = URL(videoUrl)
             val connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                connectTimeout = 15000
+                readTimeout = 15000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                setRequestProperty("Referer", "https://www.tiktok.com/")
+            }
             connection.connect()
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                com.tiktok.stickermaker.utils.AppLogger.log("Download failed: HTTP ${connection.responseCode} ${connection.responseMessage}", com.tiktok.stickermaker.utils.LogLevel.ERROR)
                 return@withContext null
             }
 

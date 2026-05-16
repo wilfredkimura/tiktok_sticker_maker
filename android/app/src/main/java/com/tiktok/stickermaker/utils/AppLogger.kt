@@ -28,6 +28,10 @@ object AppLogger {
     fun clear() {
         _logs.clear()
     }
+
+    fun getFullLogs(): String {
+        return _logs.joinToString("\n") { "[${it.timestamp}] ${it.level}: ${it.message}" }
+    }
 }
 
 data class LogEntry(

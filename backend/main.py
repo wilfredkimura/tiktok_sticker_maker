@@ -39,15 +39,20 @@ async def resolve_video(request: ResolveRequest):
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'quiet': True,
         'no_warnings': True,
-        'simulate': True, # Do not download the video
-        'extract_flat': False, # We need the actual media URLs
-        'extractor_args': {'tiktok': ['api_hostname=api16-normal-c-useast1a.tiktokv.com']},
-        'cookiefile': 'cookies.txt', # yt-dlp will look for this file
+        'simulate': True,
+        'extract_flat': False,
+        'cookiefile': 'cookies.txt',
+        'retries': 5,
+        'fragment_retries': 5,
+        'retry_sleep': 2,
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'en-US,en;q=0.9',
             'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Sec-Fetch-Dest': 'document',
         }
     }
 

@@ -32,19 +32,21 @@ class ResolveResponse(BaseModel):
     video_url: str
     title: str
 
+import httpx
+
 @app.post("/resolve", response_model=ResolveResponse)
 async def resolve_video(request: ResolveRequest):
     logger.info(f"Resolving URL: {request.url}")
     
-    # Strategy 1: Try TikWM API (Very reliable, bypasses most 429s)
+    # Strategy 1: Try TikWM API
     try:
         async with curl_requests.AsyncSession(impersonate="chrome120") as s:
             tikwm_url = f"https://www.tikwm.com/api/?url={request.url}"
-            response = await s.get(tikwm_url, timeout=30)
+            response = await s.get(tikwm_url, timeout=20)
             if response.status_code == 200:
                 data = response.json()
-                if data.get("code") == 0:
-                    video_url = data["data"].get("play") # Video without watermark
+                if data.get("code") == 0 and "data" in data:
+                    video_url = data["data"].get("play") or data["data"].get("hdplay")
                     title = data["data"].get("title", "TikTok Video")
                     if video_url:
                         logger.info("Successfully resolved via TikWM")
@@ -53,15 +55,13 @@ async def resolve_video(request: ResolveRequest):
     except Exception as e:
         logger.warning(f"TikWM resolution failed: {str(e)}")
 
-    # Strategy 2: Fallback to yt-dlp (Original method)
+    # Strategy 2: Fallback to yt-dlp
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'quiet': True,
         'no_warnings': True,
         'simulate': True,
-        'extract_flat': False,
         'cookiefile': 'cookies.txt',
-        'retries': 3,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         }
@@ -75,59 +75,39 @@ async def resolve_video(request: ResolveRequest):
             title = info.get("title", "TikTok Video")
             
             if not video_url:
-                formats = info.get("formats", [])
-                for f in formats:
-                    if f.get("ext") == "mp4" and f.get("url"):
-                        video_url = f.get("url")
-                        break
-                        
-            if not video_url:
-                raise HTTPException(status_code=400, detail="Could not extract direct video URL")
+                raise HTTPException(status_code=400, detail="Could not extract video URL from yt-dlp")
                 
             encoded_url = base64.urlsafe_b64encode(video_url.encode()).decode()
             return ResolveResponse(video_url=f"/proxy?url={encoded_url}", title=title)
             
     except Exception as e:
-        logger.error(f"All resolution strategies failed for {request.url}: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Failed to process URL: {str(e)}")
+        logger.error(f"Resolution failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Resolution failed: {str(e)}")
 
 @app.get("/proxy")
 async def proxy_video(url: str):
     try:
-        # Decode the URL using URL-safe base64
         actual_url = base64.urlsafe_b64decode(url).decode()
-        logger.info(f"Proxying request for: {actual_url[:50]}...")
+        logger.info(f"Streaming proxy for: {actual_url[:60]}...")
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://www.tiktok.com/',
-            'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
-            'Accept-Language': 'en-US,en;q=0.9',
         }
 
-        # Use curl-cffi to impersonate a real browser TLS fingerprint
         async def stream_video():
-            async with curl_requests.AsyncSession(impersonate="chrome120") as s:
-                try:
-                    # curl-cffi handle streaming differently. We fetch the content.
-                    # TikTok videos are small (usually < 20MB), so we can fetch and yield.
-                    # Impersonation happens automatically with the session.
-                    response = await s.get(actual_url, headers=headers, timeout=60, allow_redirects=True)
-                    
-                    if response.status_code != 200:
-                        logger.error(f"TikTok CDN returned {response.status_code} via curl-cffi")
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                async with client.stream("GET", actual_url, headers=headers, timeout=60) as resp:
+                    if resp.status_code != 200:
+                        logger.error(f"Upstream returned {resp.status_code}")
                         return
-
-                    # Yield the entire content as a single chunk for reliability
-                    yield response.content
-                except Exception as e:
-                    logger.error(f"Proxy streaming error: {str(e)}")
+                    async for chunk in resp.aiter_bytes(chunk_size=32768):
+                        yield chunk
 
         return StreamingResponse(stream_video(), media_type="video/mp4")
         
     except Exception as e:
-        logger.error(f"Proxy setup error: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Proxy error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")

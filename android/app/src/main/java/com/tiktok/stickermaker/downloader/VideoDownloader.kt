@@ -16,8 +16,8 @@ class VideoDownloader(private val context: Context) {
             val url = URL(videoUrl)
             val connection = url.openConnection() as HttpURLConnection
             connection.apply {
-                connectTimeout = 15000
-                readTimeout = 15000
+                connectTimeout = 60000
+                readTimeout = 60000
                 setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 setRequestProperty("Referer", "https://www.tiktok.com/")
             }

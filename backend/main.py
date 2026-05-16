@@ -89,26 +89,33 @@ async def proxy_video(url: str):
         actual_url = base64.urlsafe_b64decode(url).decode()
         logger.info(f"Proxying request for: {actual_url[:50]}...")
         
-        # Stream the video from TikTok to the client
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.tiktok.com/',
+            'Accept': '*/*'
+        }
+
+        client = httpx.AsyncClient(timeout=30.0)
+        
+        # We perform the request here so we can check the status code before returning the response
+        response = await client.get(actual_url, headers=headers, follow_redirects=True)
+        
+        if response.status_code != 200:
+            logger.error(f"TikTok CDN returned {response.status_code}")
+            await client.aclose()
+            raise HTTPException(status_code=response.status_code, detail=f"TikTok CDN returned {response.status_code}")
+
         async def stream_video():
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.tiktok.com/',
-                    'Accept': '*/*'
-                }
-                try:
-                    async with client.stream("GET", actual_url, headers=headers, follow_redirects=True) as response:
-                        if response.status_code != 200:
-                            logger.error(f"TikTok CDN returned {response.status_code}")
-                            return
-                            
-                        async for chunk in response.aiter_bytes(chunk_size=16384):
-                            yield chunk
-                except Exception as stream_err:
-                    logger.error(f"Streaming error: {str(stream_err)}")
+            try:
+                # Iterate over the content of the response we already fetched
+                # For larger files, we might want to use stream=True, but for small TikTok clips,
+                # fetching it all at once is safer against connection drops.
+                yield response.content
+            finally:
+                await client.aclose()
 
         return StreamingResponse(stream_video(), media_type="video/mp4")
+        
     except Exception as e:
         logger.error(f"Proxy setup error: {str(e)}")
         logger.error(traceback.format_exc())

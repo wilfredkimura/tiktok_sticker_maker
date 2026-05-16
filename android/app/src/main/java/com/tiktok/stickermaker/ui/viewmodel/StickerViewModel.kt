@@ -29,11 +29,14 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
     var state by mutableStateOf<AppState>(AppState.Home)
         private set
 
+    var isBackendConnected by mutableStateOf(false)
+        private set
+
     private val downloader = VideoDownloader(application)
     private val processor = FFmpegProcessor(application)
 
     // TODO: Replace with your actual Render backend URL after deployment
-    private val RENDER_URL = "https://your-app-name.onrender.com"
+    private val RENDER_URL = "https://tiktok-resolver-ly7d.onrender.com"
     private val LOCAL_URL = "http://10.0.2.2:8000"
 
     private val okHttpClient = okhttp3.OkHttpClient.Builder()
@@ -43,11 +46,26 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
         .build()
 
     private val api = Retrofit.Builder()
-        .baseUrl(LOCAL_URL) // Toggle this to RENDER_URL when ready
+        .baseUrl(RENDER_URL) // Using Render URL as requested
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(TikTokApi::class.java)
+
+    init {
+        checkBackendConnection()
+    }
+
+    fun checkBackendConnection() {
+        viewModelScope.launch {
+            try {
+                val response = api.checkHealth()
+                isBackendConnected = response["status"] == "ok"
+            } catch (e: Exception) {
+                isBackendConnected = false
+            }
+        }
+    }
 
     fun processVideo(url: String) {
         viewModelScope.launch {

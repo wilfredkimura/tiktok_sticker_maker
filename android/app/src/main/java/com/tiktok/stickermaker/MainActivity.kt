@@ -7,6 +7,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
     val state = viewModel.state
+    val context = LocalContext.current
 
     when (state) {
         is AppState.Home -> HomeScreen(
@@ -61,7 +65,7 @@ fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
         is AppState.Success -> SuccessScreen(
             onAddWhatsApp = { 
                 StickerPackManager.addStickerPackToWhatsApp(
-                    context = null, // Handled inside context logic usually, but here we pass actual context from LocalContext
+                    context = context,
                     identifier = "tiktok_stickers_1",
                     stickerPackName = "TikTok Hits"
                 ) 
@@ -74,11 +78,37 @@ fun MainApp(initialUrl: String, viewModel: StickerViewModel = viewModel()) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(initialUrl: String, onProcess: (String) -> Unit) {
+fun HomeScreen(initialUrl: String, onProcess: (String) -> Unit, viewModel: StickerViewModel = viewModel()) {
     var url by remember { mutableStateOf(initialUrl) }
+    val isConnected = viewModel.isBackendConnected
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("TikTok Sticker Maker") }) }
+        topBar = { 
+            TopAppBar(
+                title = { Text("TikTok Sticker Maker") },
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(
+                                    if (isConnected) androidx.compose.ui.graphics.Color.Green 
+                                    else androidx.compose.ui.graphics.Color.Red,
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isConnected) "Connected" else "Offline",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            ) 
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -119,7 +149,6 @@ fun LoadingScreen(message: String) {
 
 @Composable
 fun SuccessScreen(onAddWhatsApp: () -> Unit, onDone: () -> Unit) {
-    val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -127,9 +156,7 @@ fun SuccessScreen(onAddWhatsApp: () -> Unit, onDone: () -> Unit) {
     ) {
         Text("Sticker Created Successfully!", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = { 
-            StickerPackManager.addStickerPackToWhatsApp(context, "tiktok_stickers_1", "TikTok Hits") 
-        }, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = onAddWhatsApp, modifier = Modifier.fillMaxWidth()) {
             Text("Add to WhatsApp")
         }
         Spacer(modifier = Modifier.height(8.dp))

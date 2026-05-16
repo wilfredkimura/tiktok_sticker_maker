@@ -9,4 +9,7 @@ data class ResolveResponse(val video_url: String, val title: String)
 interface TikTokApi {
     @POST("/resolve")
     suspend fun resolveVideo(@Body request: ResolveRequest): ResolveResponse
+
+    @retrofit2.http.GET("/")
+    suspend fun checkHealth(): Map<String, String>
 }

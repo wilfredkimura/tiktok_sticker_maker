@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.foundation.layout.*
@@ -227,13 +228,43 @@ fun LogsScreen(onBack: () -> Unit) {
                     com.tiktok.stickermaker.utils.LogLevel.DEBUG -> Color.Gray
                     else -> Color.Black
                 }
-                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    Text(
-                        text = "[${entry.timestamp}] ${entry.message}",
-                        color = color,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Divider(modifier = Modifier.padding(top = 4.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Column(modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "[${entry.timestamp}] ${entry.tag ?: ""}",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Text(
+                                    text = entry.message,
+                                    color = color,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                entry.source?.let {
+                                    Text(
+                                        text = "at $it",
+                                        color = Color.Gray.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                            IconButton(onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("Log Line", entry.message)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(context, "Line copied", android.widget.Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.ContentCopy,
+                                    contentDescription = "Copy Line",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        Divider(modifier = Modifier.padding(top = 4.dp), color = Color.LightGray.copy(alpha = 0.5f))
+                    }
                 }
             }
         }

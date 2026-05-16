@@ -14,15 +14,24 @@ object AppLogger {
 
     private val dateFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
-    fun log(message: String, level: LogLevel = LogLevel.INFO) {
+    fun log(message: String, level: LogLevel = LogLevel.INFO, tag: String? = null) {
+        val stackTrace = Thread.currentThread().stackTrace
+        // Index 3 or 4 usually contains the caller info
+        val caller = stackTrace.getOrNull(4)
+        val source = if (caller != null) {
+            "${caller.fileName}:${caller.lineNumber}"
+        } else null
+
         val entry = LogEntry(
             timestamp = dateFormat.format(Date()),
             message = message,
-            level = level
+            level = level,
+            source = source,
+            tag = tag
         )
-        _logs.add(0, entry) // Add to top
-        if (_logs.size > 200) _logs.removeLast() // Keep last 200 logs
-        println("${entry.timestamp} [${entry.level}] ${entry.message}")
+        _logs.add(0, entry)
+        if (_logs.size > 500) _logs.removeLast()
+        println("${entry.timestamp} [${entry.level}] ${entry.tag ?: ""}: ${entry.message} (${entry.source})")
     }
 
     fun clear() {
@@ -30,14 +39,16 @@ object AppLogger {
     }
 
     fun getFullLogs(): String {
-        return _logs.joinToString("\n") { "[${it.timestamp}] ${it.level}: ${it.message}" }
+        return _logs.joinToString("\n") { "[${it.timestamp}] ${it.level} ${it.tag ?: ""}: ${it.message} ${it.source?.let { "($it)" } ?: ""}" }
     }
 }
 
 data class LogEntry(
     val timestamp: String,
     val message: String,
-    val level: LogLevel
+    val level: LogLevel,
+    val source: String? = null,
+    val tag: String? = null
 )
 
 enum class LogLevel {

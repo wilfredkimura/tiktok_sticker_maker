@@ -72,9 +72,9 @@ async def resolve_video(request: ResolveRequest):
             if not video_url:
                 raise HTTPException(status_code=400, detail="Could not extract direct video URL")
                 
-            # Instead of returning the direct TikTok URL (which is IP-locked),
-            # we return a proxy URL that points back to this backend.
-            proxy_url = f"/proxy?url={base64.b64encode(video_url.encode()).decode()}"
+            # Use URL-safe Base64 to avoid issues with + and / in query params
+            encoded_url = base64.urlsafe_b64encode(video_url.encode()).decode()
+            proxy_url = f"/proxy?url={encoded_url}"
             return ResolveResponse(video_url=proxy_url, title=title)
             
     except Exception as e:
@@ -85,24 +85,34 @@ async def resolve_video(request: ResolveRequest):
 @app.get("/proxy")
 async def proxy_video(url: str):
     try:
-        # Decode the URL
-        actual_url = base64.b64decode(url).decode()
+        # Decode the URL using URL-safe base64
+        actual_url = base64.urlsafe_b64decode(url).decode()
+        logger.info(f"Proxying request for: {actual_url[:50]}...")
         
         # Stream the video from TikTok to the client
         async def stream_video():
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.tiktok.com/'
+                    'Referer': 'https://www.tiktok.com/',
+                    'Accept': '*/*'
                 }
-                async with client.stream("GET", actual_url, headers=headers, follow_redirects=True) as response:
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
+                try:
+                    async with client.stream("GET", actual_url, headers=headers, follow_redirects=True) as response:
+                        if response.status_code != 200:
+                            logger.error(f"TikTok CDN returned {response.status_code}")
+                            return
+                            
+                        async for chunk in response.aiter_bytes(chunk_size=16384):
+                            yield chunk
+                except Exception as stream_err:
+                    logger.error(f"Streaming error: {str(stream_err)}")
 
         return StreamingResponse(stream_video(), media_type="video/mp4")
     except Exception as e:
-        logger.error(f"Proxy error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to proxy video")
+        logger.error(f"Proxy setup error: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 def read_root():

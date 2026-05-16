@@ -34,7 +34,26 @@ class ResolveResponse(BaseModel):
 
 @app.post("/resolve", response_model=ResolveResponse)
 async def resolve_video(request: ResolveRequest):
-    # yt-dlp options to extract the best MP4 format without downloading
+    logger.info(f"Resolving URL: {request.url}")
+    
+    # Strategy 1: Try TikWM API (Very reliable, bypasses most 429s)
+    try:
+        async with curl_requests.AsyncSession(impersonate="chrome120") as s:
+            tikwm_url = f"https://www.tikwm.com/api/?url={request.url}"
+            response = await s.get(tikwm_url, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 0:
+                    video_url = data["data"].get("play") # Video without watermark
+                    title = data["data"].get("title", "TikTok Video")
+                    if video_url:
+                        logger.info("Successfully resolved via TikWM")
+                        encoded_url = base64.urlsafe_b64encode(video_url.encode()).decode()
+                        return ResolveResponse(video_url=f"/proxy?url={encoded_url}", title=title)
+    except Exception as e:
+        logger.warning(f"TikWM resolution failed: {str(e)}")
+
+    # Strategy 2: Fallback to yt-dlp (Original method)
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'quiet': True,
@@ -42,31 +61,19 @@ async def resolve_video(request: ResolveRequest):
         'simulate': True,
         'extract_flat': False,
         'cookiefile': 'cookies.txt',
-        'retries': 5,
-        'fragment_retries': 5,
-        'retry_sleep': 2,
+        'retries': 3,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Sec-Fetch-Dest': 'document',
         }
     }
 
     try:
-        logger.info(f"Resolving URL: {request.url}")
+        logger.info("Attempting fallback resolution via yt-dlp")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract info dictionary
             info = ydl.extract_info(request.url, download=False)
-            
-            # The 'url' field typically contains the direct download link
             video_url = info.get("url")
             title = info.get("title", "TikTok Video")
             
-            # Fallback to search through formats if 'url' is not at the top level
             if not video_url:
                 formats = info.get("formats", [])
                 for f in formats:
@@ -77,14 +84,11 @@ async def resolve_video(request: ResolveRequest):
             if not video_url:
                 raise HTTPException(status_code=400, detail="Could not extract direct video URL")
                 
-            # Use URL-safe Base64 to avoid issues with + and / in query params
             encoded_url = base64.urlsafe_b64encode(video_url.encode()).decode()
-            proxy_url = f"/proxy?url={encoded_url}"
-            return ResolveResponse(video_url=proxy_url, title=title)
+            return ResolveResponse(video_url=f"/proxy?url={encoded_url}", title=title)
             
     except Exception as e:
-        logger.error(f"Error resolving {request.url}: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.error(f"All resolution strategies failed for {request.url}: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Failed to process URL: {str(e)}")
 
 @app.get("/proxy")

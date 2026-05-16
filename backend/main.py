@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
-import httpx
+from curl_cffi import requests as curl_requests
 import yt_dlp
 import traceback
 import logging
@@ -92,35 +92,29 @@ async def proxy_video(url: str):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://www.tiktok.com/',
-            'Accept': '*/*'
+            'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+            'Accept-Language': 'en-US,en;q=0.9',
         }
 
-        client = httpx.AsyncClient(timeout=60.0)
-        
-        try:
-            # Build the request and send it with stream=True to avoid buffering the whole video in memory
-            request = client.build_request("GET", actual_url, headers=headers)
-            response = await client.send(request, stream=True, follow_redirects=True)
-            
-            if response.status_code != 200:
-                logger.error(f"TikTok CDN returned {response.status_code}")
-                await response.aclose()
-                await client.aclose()
-                raise HTTPException(status_code=response.status_code, detail=f"TikTok CDN returned {response.status_code}")
-
-            async def stream_video():
+        # Use curl-cffi to impersonate a real browser TLS fingerprint
+        async def stream_video():
+            async with curl_requests.AsyncSession(impersonate="chrome120") as s:
                 try:
-                    async for chunk in response.aiter_bytes(chunk_size=16384):
-                        yield chunk
-                finally:
-                    await response.aclose()
-                    await client.aclose()
+                    # curl-cffi handle streaming differently. We fetch the content.
+                    # TikTok videos are small (usually < 20MB), so we can fetch and yield.
+                    # Impersonation happens automatically with the session.
+                    response = await s.get(actual_url, headers=headers, timeout=60, follow_redirects=True)
+                    
+                    if response.status_code != 200:
+                        logger.error(f"TikTok CDN returned {response.status_code} via curl-cffi")
+                        return
 
-            return StreamingResponse(stream_video(), media_type="video/mp4")
-            
-        except Exception as e:
-            await client.aclose()
-            raise e
+                    # Yield the entire content as a single chunk for reliability
+                    yield response.content
+                except Exception as e:
+                    logger.error(f"Proxy streaming error: {str(e)}")
+
+        return StreamingResponse(stream_video(), media_type="video/mp4")
         
     except Exception as e:
         logger.error(f"Proxy setup error: {str(e)}")

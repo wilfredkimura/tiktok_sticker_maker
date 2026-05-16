@@ -32,9 +32,19 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
     private val downloader = VideoDownloader(application)
     private val processor = FFmpegProcessor(application)
 
-    // Change this to your Render backend URL
+    // TODO: Replace with your actual Render backend URL after deployment
+    private val RENDER_URL = "https://your-app-name.onrender.com"
+    private val LOCAL_URL = "http://10.0.2.2:8000"
+
+    private val okHttpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     private val api = Retrofit.Builder()
-        .baseUrl("http://10.0.2.2:8000") // 10.0.2.2 is localhost for Android Emulator
+        .baseUrl(LOCAL_URL) // Toggle this to RENDER_URL when ready
+        .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(TikTokApi::class.java)

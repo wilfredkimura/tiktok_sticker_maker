@@ -3,10 +3,23 @@ from pydantic import BaseModel
 import yt_dlp
 import traceback
 import logging
+import os
+import base64
 
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Handle cookies.txt from environment variable (for Render deployment)
+cookies_b64 = os.environ.get("TIKTOK_COOKIES_BASE64")
+if cookies_b64:
+    try:
+        cookies_data = base64.b64decode(cookies_b64)
+        with open("cookies.txt", "wb") as f:
+            f.write(cookies_data)
+        logger.info("Successfully decoded and created cookies.txt from environment variable")
+    except Exception as e:
+        logger.error(f"Failed to decode TIKTOK_COOKIES_BASE64: {str(e)}")
 
 app = FastAPI(title="TikTok Video Resolver API")
 

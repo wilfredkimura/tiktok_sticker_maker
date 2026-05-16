@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+import httpx
 import yt_dlp
 import traceback
 import logging
@@ -70,12 +72,37 @@ async def resolve_video(request: ResolveRequest):
             if not video_url:
                 raise HTTPException(status_code=400, detail="Could not extract direct video URL")
                 
-            return ResolveResponse(video_url=video_url, title=title)
+            # Instead of returning the direct TikTok URL (which is IP-locked),
+            # we return a proxy URL that points back to this backend.
+            proxy_url = f"/proxy?url={base64.b64encode(video_url.encode()).decode()}"
+            return ResolveResponse(video_url=proxy_url, title=title)
             
     except Exception as e:
         logger.error(f"Error resolving {request.url}: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Failed to process URL: {str(e)}")
+
+@app.get("/proxy")
+async def proxy_video(url: str):
+    try:
+        # Decode the URL
+        actual_url = base64.b64decode(url).decode()
+        
+        # Stream the video from TikTok to the client
+        async def stream_video():
+            async with httpx.AsyncClient() as client:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.tiktok.com/'
+                }
+                async with client.stream("GET", actual_url, headers=headers, follow_redirects=True) as response:
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+
+        return StreamingResponse(stream_video(), media_type="video/mp4")
+    except Exception as e:
+        logger.error(f"Proxy error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to proxy video")
 
 @app.get("/")
 def read_root():

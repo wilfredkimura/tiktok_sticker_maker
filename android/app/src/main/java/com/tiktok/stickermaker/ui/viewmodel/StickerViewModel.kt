@@ -80,10 +80,18 @@ class StickerViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val response = api.resolveVideo(ResolveRequest(url))
                 AppLogger.log("Resolved video title: ${response.title}")
-                AppLogger.log("Resolved video URL: ${response.video_url}")
+                AppLogger.log("Resolved raw video URL: ${response.video_url}")
+                
+                val finalUrl = if (response.video_url.startsWith("/")) {
+                    RENDER_URL + response.video_url
+                } else {
+                    response.video_url
+                }
+                
+                AppLogger.log("Final download URL: $finalUrl")
                 
                 AppLogger.log("Starting download...")
-                val videoFile = downloader.downloadVideo(response.video_url, "temp_video")
+                val videoFile = downloader.downloadVideo(finalUrl, "temp_video")
                 if (videoFile != null) {
                     AppLogger.log("Download complete: ${videoFile.length()} bytes")
                     state = AppState.Editor(videoFile)

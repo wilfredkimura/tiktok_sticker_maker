@@ -99,8 +99,8 @@ async def proxy_video(url: str):
         
         try:
             # Build the request and send it with stream=True to avoid buffering the whole video in memory
-            request = client.build_request("GET", actual_url, headers=headers, follow_redirects=True)
-            response = await client.send(request, stream=True)
+            request = client.build_request("GET", actual_url, headers=headers)
+            response = await client.send(request, stream=True, follow_redirects=True)
             
             if response.status_code != 200:
                 logger.error(f"TikTok CDN returned {response.status_code}")
